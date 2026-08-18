@@ -8,9 +8,10 @@ repositorio.
 | --- | --- | ---: | ---: |
 | `denue_cdmx.parquet` | El DENUE completo de CDMX, sin filtrar | 462,732 | 27.9 MB |
 | `denue_construccion.parquet` | Solo los 99 giros de la cadena de valor de la construcción | 20,957 | 1.7 MB |
+| `denue.sqlite` | El catálogo que consume la plataforma: 14 de las 42 columnas, 3 índices | 20,957 | 5.6 MB |
 
-Ambos tienen las mismas 42 columnas que publica el INEGI, con los mismos
-nombres y en el mismo orden.
+Los dos Parquet tienen las mismas 42 columnas que publica el INEGI, con los
+mismos nombres y en el mismo orden. El SQLite no: ver más abajo.
 
 ## Por qué Parquet y no el CSV original
 
@@ -40,13 +41,62 @@ No se da por supuesto: se comparó el Parquet contra el CSV celda por celda.
 
 `tests/test_convertir_denue_a_parquet.py` fija esas garantías como pruebas.
 
+## `denue.sqlite` — el catálogo de la plataforma
+
+Es el artefacto que consume [`HOLTMONT-PYTHON`](https://github.com/Luis-Dokkaebi/HOLTMONT-PYTHON)
+(se copia a `api/data/denue.sqlite`). No sustituye al Parquet: lo complementa.
+
+**Por qué existe.** Leer el Parquet desde la API exige `pandas` + `pyarrow` +
+`numpy`, que descomprimidos suman **251 MB** y no caben en el límite de 250 MB de
+una función serverless de Vercel. El SQLite se consulta con el módulo `sqlite3`
+de la **biblioteca estándar**: la plataforma no gana ni una dependencia. `pandas`
+y `pyarrow` se quedan de este lado, en el ETL.
+
+**Qué lleva.** 14 de las 42 columnas —las que pinta el mapa y las que forman la
+ficha del negocio— y tres índices, uno por cada acceso que hace la plataforma:
+
+```sql
+CREATE TABLE denue (
+  id TEXT PRIMARY KEY, nom_estab TEXT, nombre_act TEXT, codigo_act TEXT,
+  per_ocu TEXT, telefono TEXT, correoelec TEXT, www TEXT,
+  municipio TEXT, nom_vial TEXT, numero_ext TEXT, cod_postal TEXT,
+  latitud REAL, longitud REAL
+);
+CREATE INDEX idx_mun ON denue(municipio);   -- filtro por alcaldía
+CREATE INDEX idx_act ON denue(codigo_act);  -- filtro por giro
+CREATE INDEX idx_geo ON denue(latitud, longitud);  -- bbox del mapa
+```
+
+`cod_postal` es **TEXT**, igual que en el Parquet y por el mismo motivo: `"01000"`
+guardado como entero se vuelve `1000` y deja de cruzar. `cve_ent` y `cve_mun` no
+viajan al SQLite —no están entre las 14 columnas— pero siguen intactas en los
+Parquet, que son la fuente.
+
+**Es determinista.** Dos construcciones del mismo Parquet producen el mismo
+archivo byte por byte. Por eso se puede versionar sin que cada regeneración meta
+5 MB de ruido en el diff. El script borra la salida antes de escribir: SQLite
+reusa las páginas libres del archivo que encuentra, y construir encima de una
+corrida anterior daría bytes distintos con el mismo contenido.
+
+`tests/test_construir_sqlite.py` fija todo lo anterior como pruebas, incluidas
+las cifras: 20,957 filas, 1,972 proveedores de 11+ personas con contacto, y el
+techo de peso.
+
 ## Cómo regenerarlos
 
-Cuando el INEGI publique una actualización:
+Cuando el INEGI publique una actualización, los dos pasos en orden:
 
 ```bash
+# 1. CSV del INEGI (248 MB) → los dos Parquet
 python scripts/convertir_denue_a_parquet.py denue_inegi_09_.csv data/
+
+# 2. Parquet de construcción → el SQLite de la plataforma
+python scripts/construir_sqlite.py
+#    equivale a:
+#    python scripts/construir_sqlite.py data/denue_construccion.parquet data/denue.sqlite
 ```
+
+Ambos pasos requieren `pandas` y `pyarrow` (`pip install -r requirements.txt`).
 
 El CSV crudo **no se versiona**: pesa mil veces más que su parte útil y se
 vuelve a descargar del INEGI cuando hace falta.

@@ -8,8 +8,9 @@ Ciudad de México, construido sobre el DENUE del INEGI.
 | Ruta | Qué es |
 | --- | --- |
 | `modelo_analisis_geoespacial (2).ipynb` | El modelo: mapa con filtros por alcaldía y giro, selección por polígono, y un agente que analiza el sitio web del negocio o redacta la solicitud de cotización |
-| `data/` | El DENUE de CDMX en Parquet — 462,732 establecimientos, y el subconjunto de 20,957 de construcción. Ver [`data/README.md`](data/README.md) |
-| `scripts/convertir_denue_a_parquet.py` | Regenera los archivos de `data/` a partir del CSV que publica el INEGI |
+| `data/` | El DENUE de CDMX en Parquet — 462,732 establecimientos, y el subconjunto de 20,957 de construcción — más `denue.sqlite`, el catálogo que consume la plataforma. Ver [`data/README.md`](data/README.md) |
+| `scripts/convertir_denue_a_parquet.py` | Regenera los Parquet de `data/` a partir del CSV que publica el INEGI |
+| `scripts/construir_sqlite.py` | Construye `data/denue.sqlite` desde el Parquet de construcción: 14 columnas, 3 índices, 5.6 MB |
 | `tests/` | Pruebas del ETL |
 
 ## El universo de datos
@@ -36,6 +37,21 @@ las otras seis veces el grafo va directo a redactar el contacto.
 Filtrando a empresas de **11 o más personas con al menos un dato de contacto**
 quedan **1,972 proveedores** — una lista que un equipo de compras puede recorrer
 de verdad.
+
+## El catálogo para la plataforma
+
+`data/denue.sqlite` es lo que consume [`HOLTMONT-PYTHON`](https://github.com/Luis-Dokkaebi/HOLTMONT-PYTHON)
+como módulo de prospección. Se consulta con el `sqlite3` de la biblioteca
+estándar, así que la plataforma no gana ninguna dependencia: `pandas` y
+`pyarrow` se quedan en el ETL de este repositorio, que es el punto de la
+arquitectura. Se regenera con:
+
+```bash
+python scripts/construir_sqlite.py
+```
+
+El detalle —esquema, índices, por qué no es el Parquet y por qué es
+determinista— está en [`data/README.md`](data/README.md).
 
 ## Cómo correr las pruebas
 
