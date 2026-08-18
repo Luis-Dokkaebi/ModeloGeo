@@ -1,0 +1,8 @@
+# Dependencias del ETL del DENUE (`scripts/convertir_denue_a_parquet.py`) y de
+# su prueba. El notebook instala aparte lo suyo (ipyleaflet, langgraph,
+# crawl4ai) desde su primera celda, porque corre en Colab.
+pandas>=2.0
+pyarrow>=14.0
+
+# Para `python -m pytest tests/`
+pytest>=8.0

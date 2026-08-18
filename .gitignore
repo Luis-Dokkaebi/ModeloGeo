@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+venv/
+.venv/
+
+# El CSV crudo del INEGI: 248 MB. Se descarga cuando hace falta y se convierte
+# con scripts/convertir_denue_a_parquet.py; lo que se versiona es la salida.
+denue_inegi_*.csv
