@@ -11,6 +11,7 @@ Ciudad de México, construido sobre el DENUE del INEGI.
 | `data/` | El DENUE de CDMX en Parquet — 462,732 establecimientos, y el subconjunto de 20,957 de construcción — más `denue.sqlite`, el catálogo que consume la plataforma. Ver [`data/README.md`](data/README.md) |
 | `scripts/convertir_denue_a_parquet.py` | Regenera los Parquet de `data/` a partir del CSV que publica el INEGI |
 | `scripts/construir_sqlite.py` | Construye `data/denue.sqlite` desde el Parquet de construcción: 14 columnas, 3 índices, 5.6 MB |
+| `scripts/enriquecer_sitios.py` | Recorre los 2,848 sitios web del DENUE fuera de línea y guarda el texto en `data/cache_sitios.jsonl` |
 | `tests/` | Pruebas del ETL |
 
 ## El universo de datos
@@ -52,6 +53,35 @@ python scripts/construir_sqlite.py
 
 El detalle —esquema, índices, por qué no es el Parquet y por qué es
 determinista— está en [`data/README.md`](data/README.md).
+
+## El enriquecimiento de sitios
+
+De los 20,957 establecimientos, **2,848 (13.6%)** declararon sitio web. El agente
+de la plataforma necesita el texto de esas páginas, y pedirlo en vivo significa
+el vendedor esperando de 5 a 30 segundos a que responda un servidor ajeno.
+
+Como el conjunto es finito y conocido, se recorre aquí una vez:
+
+```bash
+python scripts/enriquecer_sitios.py --limite 100   # una tanda
+python scripts/enriquecer_sitios.py                # los que falten
+```
+
+Genera `data/cache_sitios.jsonl`, una línea por establecimiento. Tres propiedades
+que lo hacen usable de verdad:
+
+- **Reanudable.** Se escribe línea a línea; un corte a mitad conserva lo hecho y
+  la siguiente corrida sigue donde iba.
+- **Los fallos se guardan, con fecha.** 1 de cada 4 sitios del DENUE falló al
+  medirlo. Sin anotar el fallo, cada corrida se va en esperar los timeouts de los
+  mismos sitios muertos. Reintentarlos es una decisión explícita
+  (`--reintentar-fallos`).
+- **No se muere por un sitio.** Un certificado vencido en el número 300 no tira
+  las 2,548 lecturas que faltan.
+
+Este job vive aquí y no en la plataforma por la misma razón que el ETL: en este
+repositorio sí caben las herramientas pesadas, y en una función serverless de
+250 MB no.
 
 ## Cómo correr las pruebas
 
